@@ -1,27 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:trigger/trigger.dart';
 
-part 'selftrigger_widget_src.dart';
-
 mixin TriggerStateMixin<T extends StatefulWidget, U extends Trigger> on State<T>
     implements Updateable {
-  U? _trigger;
-  U get trigger => _trigger!;
-  TriggerFields<U> get listenTo;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final scope = context.dependOnInheritedWidgetOfExactType<TriggerScope<U>>();
-    final newTrigger = scope?.trigger ?? Trigger.of<U>();
-    if (_trigger != newTrigger) {
-      _trigger = newTrigger;
-      for (final key in listenTo) {
-        trigger.listenTo(key, this);
-      }
-    }
-  }
+  U get trigger;
+  List<String> get listenTo;
 
   @override
   void dispose() {
@@ -35,34 +18,58 @@ mixin TriggerStateMixin<T extends StatefulWidget, U extends Trigger> on State<T>
   }
 }
 
-class TriggerScope<U extends Trigger> extends InheritedWidget {
-  const TriggerScope({super.key, required this.trigger, required super.child});
+class TriggerScope extends InheritedWidget {
+  final Map<Type, Trigger> tgMap = {};
+  // final Widget? child; // เก็บไว้รองรับ const
+  final Widget Function(BuildContext context)? builder; // แก้ปัญหา Namespace
 
-  final U trigger;
-
-  static U of<U extends Trigger>(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<TriggerScope<U>>();
-    if (scope == null) {
-      throw Exception('No TriggerScope of type $U found in context.');
+  TriggerScope({
+    super.key,
+    required List<Trigger> triggers,
+    Widget? child,
+    this.builder,
+  }) : assert(
+         child != null || builder != null,
+         'ต้องส่งอย่างใดอย่างหนึ่ง (child หรือ builder)',
+       ),
+       super(
+         // ถ้ามี builder ให้ครอบด้วย Builder เพื่อสร้าง Context ใหม่ทันที
+         child: builder != null
+             ? Builder(builder: (context) => builder(context))
+             : child!,
+       ) {
+    for (var t in triggers) {
+      assert(!tgMap.containsKey(t.runtimeType));
+      tgMap[t.runtimeType] = t;
     }
-    return scope.trigger;
+  }
+  static U? of<U extends Trigger>(BuildContext context) {
+    // 2. หาถังกลาง TriggerScope
+    final scope = context.dependOnInheritedWidgetOfExactType<TriggerScope>();
+    if (scope == null) return null;
+    return scope.tgMap[U] as U?;
   }
 
   @override
-  bool updateShouldNotify(covariant TriggerScope<U> oldWidget) {
-    return oldWidget.trigger != trigger;
+  bool updateShouldNotify(covariant TriggerScope oldWidget) {
+    // return oldWidget != tgMap;
+    return false;
   }
 }
 
 class TriggerWidget<U extends Trigger> extends StatefulWidget {
-  const TriggerWidget({
+  TriggerWidget({
     super.key,
-    required this.listenTo,
-    required this.builder,
-  });
+    U? trigger,
+    required TriggerFields<U> listenTo,
+    required Widget Function(BuildContext context, U trigger) builder,
+  }) : _trigger = trigger,
+       _listenTo = listenTo.getList(),
+       _builder = builder;
 
-  final TriggerFields<U> listenTo;
-  final Widget Function(BuildContext context, U trigger) builder;
+  final List<String> _listenTo;
+  final Widget Function(BuildContext context, U trigger) _builder;
+  final U? _trigger;
 
   @override
   State<TriggerWidget<U>> createState() => _TriggerWidgetState<U>();
@@ -70,9 +77,47 @@ class TriggerWidget<U extends Trigger> extends StatefulWidget {
 
 class _TriggerWidgetState<U extends Trigger> extends State<TriggerWidget<U>>
     with TriggerStateMixin<TriggerWidget<U>, U> {
+  U? _trigger;
   @override
-  Widget build(BuildContext context) => widget.builder(context, trigger);
+  U get trigger => _trigger!;
 
   @override
-  TriggerFields<U> get listenTo => widget.listenTo;
+  Widget build(BuildContext context) => widget._builder(context, trigger);
+
+  @override
+  List<String> get listenTo => widget._listenTo;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final newTrigger =
+        widget._trigger ?? TriggerScope.of<U>(context) ?? Trigger.of<U>();
+
+    if (_trigger != newTrigger) {
+      if (_trigger != null) {
+        _trigger!.stopListeningAll(this);
+      }
+
+      _trigger = newTrigger;
+
+      for (final key in listenTo) {
+        // ignore: invalid_use_of_protected_member
+        trigger.listenTo(key, this);
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(TriggerWidget<U> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // ถ้า List ของการฟังเปลี่ยนไป ให้เคลียร์ของเก่าแล้วลงทะเบียนใหม่
+    if (oldWidget._listenTo != widget._listenTo) {
+      trigger.stopListeningAll(this); // เคลียร์ตัวเก่า
+      for (final key in widget._listenTo) {
+        // ignore: invalid_use_of_protected_member
+        trigger.listenTo(key, this); // ลงทะเบียนตัวใหม่
+      }
+    }
+  }
 }

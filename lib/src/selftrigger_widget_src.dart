@@ -1,4 +1,6 @@
-part of 'trigger_widgets_src.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 
 final class SelfTriggerWidgetController<T> {
   T _data;
