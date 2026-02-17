@@ -81,43 +81,78 @@ class _TriggerWidgetState<U extends Trigger> extends State<TriggerWidget<U>>
   @override
   U get trigger => _trigger!;
 
+  /// ฟังก์ชันช่วยในการ resolve หา trigger และจัดการ subscription
+  void _resolveAndSubscribe() {
+    final newTrigger =
+        widget._trigger ?? TriggerScope.of<U>(context) ?? Trigger.of<U>();
+
+    // ถ้า trigger เปลี่ยน instance (ไม่ว่าจะเปลี่ยนจาก widget หรือ scope)
+    if (_trigger != newTrigger) {
+      _trigger?.stopListeningAll(this);
+      _trigger = newTrigger;
+
+      for (final key in listenTo) {
+        // ignore: invalid_use_of_protected_member
+        _trigger!.listenTo(key, this);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => widget._builder(context, trigger);
 
   @override
   List<String> get listenTo => widget._listenTo;
 
+  // @override
+  // void didChangeDependencies() {
+  //   super.didChangeDependencies();
+
+  //   final newTrigger =
+  //       widget._trigger ?? TriggerScope.of<U>(context) ?? Trigger.of<U>();
+
+  //   if (_trigger != newTrigger) {
+  //     if (_trigger != null) {
+  //       _trigger!.stopListeningAll(this);
+  //     }
+
+  //     _trigger = newTrigger;
+
+  //     for (final key in listenTo) {
+  //       // ignore: invalid_use_of_protected_member
+  //       trigger.listenTo(key, this);
+  //     }
+  //   }
+  // }
+
+  // @override
+  // void didUpdateWidget(TriggerWidget<U> oldWidget) {
+  //   super.didUpdateWidget(oldWidget);
+  //   // ถ้า List ของการฟังเปลี่ยนไป ให้เคลียร์ของเก่าแล้วลงทะเบียนใหม่
+  //   if (oldWidget._listenTo != widget._listenTo) {
+  //     trigger.stopListeningAll(this); // เคลียร์ตัวเก่า
+  //     for (final key in widget._listenTo) {
+  //       // ignore: invalid_use_of_protected_member
+  //       trigger.listenTo(key, this); // ลงทะเบียนตัวใหม่
+  //     }
+  //   }
+  // }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    final newTrigger =
-        widget._trigger ?? TriggerScope.of<U>(context) ?? Trigger.of<U>();
-
-    if (_trigger != newTrigger) {
-      if (_trigger != null) {
-        _trigger!.stopListeningAll(this);
-      }
-
-      _trigger = newTrigger;
-
-      for (final key in listenTo) {
-        // ignore: invalid_use_of_protected_member
-        trigger.listenTo(key, this);
-      }
-    }
+    _resolveAndSubscribe();
   }
 
   @override
   void didUpdateWidget(TriggerWidget<U> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // ถ้า List ของการฟังเปลี่ยนไป ให้เคลียร์ของเก่าแล้วลงทะเบียนใหม่
-    if (oldWidget._listenTo != widget._listenTo) {
-      trigger.stopListeningAll(this); // เคลียร์ตัวเก่า
-      for (final key in widget._listenTo) {
-        // ignore: invalid_use_of_protected_member
-        trigger.listenTo(key, this); // ลงทะเบียนตัวใหม่
-      }
+
+    // 1. ถ้า listenTo เปลี่ยน ต้องล้างและจองใหม่เสมอ
+    // 2. ถ้า widget._trigger เปลี่ยน (เช่น ส่งค่าใหม่เข้ามาตรงๆ) _resolveAndSubscribe จะจัดการให้
+    if (oldWidget._listenTo != widget._listenTo ||
+        oldWidget._trigger != widget._trigger) {
+      _resolveAndSubscribe();
     }
   }
 }
