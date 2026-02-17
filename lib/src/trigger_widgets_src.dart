@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:trigger/trigger.dart';
+part of '../trigger_widgets.dart';
 
 mixin TriggerStateMixin<T extends StatefulWidget, U extends Trigger> on State<T>
     implements Updateable {
@@ -18,42 +17,91 @@ mixin TriggerStateMixin<T extends StatefulWidget, U extends Trigger> on State<T>
   }
 }
 
-class TriggerScope extends InheritedWidget {
-  final Map<Type, Trigger> tgMap = {};
-  // final Widget? child; // เก็บไว้รองรับ const
-  final Widget Function(BuildContext context)? builder; // แก้ปัญหา Namespace
+class TriggerScope extends StatefulWidget {
+  final List<Trigger> triggers;
+  final Widget? child;
+  final Widget Function(BuildContext context)? builder;
+  final bool autoDispose; // เพิ่ม option เผื่อบางคนไม่อยากให้ dispose อัตโนมัติ
 
-  TriggerScope({
+  const TriggerScope({
     super.key,
-    required List<Trigger> triggers,
-    Widget? child,
+    required this.triggers,
+    this.child,
     this.builder,
-  }) : assert(
-         child != null || builder != null,
-         'ต้องส่งอย่างใดอย่างหนึ่ง (child หรือ builder)',
-       ),
-       super(
-         // ถ้ามี builder ให้ครอบด้วย Builder เพื่อสร้าง Context ใหม่ทันที
-         child: builder != null
-             ? Builder(builder: (context) => builder(context))
-             : child!,
-       ) {
-    for (var t in triggers) {
-      assert(!tgMap.containsKey(t.runtimeType));
-      tgMap[t.runtimeType] = t;
+    this.autoDispose = true, // default เป็น true เพื่อความปลอดภัย
+  }) : assert(child != null || builder != null);
+
+  @override
+  State<TriggerScope> createState() => _TriggerScopeState();
+
+  // Helper สำหรับดึงข้อมูล (เหมือนเดิม)
+  static U? of<U extends Trigger>(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_InheritedTriggerScope>();
+    return scope?.tgMap[U] as U?;
+  }
+}
+
+class _TriggerScopeState extends State<TriggerScope> {
+  late Map<Type, Trigger> _tgMap;
+
+  @override
+  void initState() {
+    super.initState();
+    _initMap();
+  }
+
+  void _initMap() {
+    _tgMap = {};
+    for (var t in widget.triggers) {
+      _tgMap[t.runtimeType] = t;
     }
   }
-  static U? of<U extends Trigger>(BuildContext context) {
-    // 2. หาถังกลาง TriggerScope
-    final scope = context.dependOnInheritedWidgetOfExactType<TriggerScope>();
-    if (scope == null) return null;
-    return scope.tgMap[U] as U?;
+
+  // ใน _TriggerScopeState
+  @override
+  void dispose() {
+    if (widget.autoDispose) {
+      for (var trigger in _tgMap.values) {
+        // ทำลายเฉพาะตัวที่ถูก spawn ออกมา (ไม่ใช่ Singleton หลักของระบบ)
+        if (!trigger.isSingleton) {
+          trigger.dispose();
+        }
+      }
+    }
+    super.dispose();
   }
 
   @override
-  bool updateShouldNotify(covariant TriggerScope oldWidget) {
-    // return oldWidget != tgMap;
-    return false;
+  Widget build(BuildContext context) {
+    return _InheritedTriggerScope(
+      tgMap: _tgMap,
+      child: widget.builder != null
+          ? Builder(builder: (context) => widget.builder!(context))
+          : widget.child!,
+    );
+  }
+
+  @override
+  void didUpdateWidget(TriggerScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // ถ้า list ของ triggers เปลี่ยน ให้ rebuild map ใหม่
+    if (oldWidget.triggers != widget.triggers) {
+      _initMap();
+    }
+  }
+}
+
+// แยก InheritedWidget ออกมาไว้ใช้ภายใน
+class _InheritedTriggerScope extends InheritedWidget {
+  final Map<Type, Trigger> tgMap;
+
+  const _InheritedTriggerScope({required this.tgMap, required super.child});
+
+  @override
+  bool updateShouldNotify(covariant _InheritedTriggerScope oldWidget) {
+    // ถ้า map เปลี่ยน (มีการสลับ instance) ให้แจ้งเตือนลูกๆ ที่ฟังอยู่
+    return oldWidget.tgMap != tgMap;
   }
 }
 
@@ -103,40 +151,6 @@ class _TriggerWidgetState<U extends Trigger> extends State<TriggerWidget<U>>
 
   @override
   List<String> get listenTo => widget._listenTo;
-
-  // @override
-  // void didChangeDependencies() {
-  //   super.didChangeDependencies();
-
-  //   final newTrigger =
-  //       widget._trigger ?? TriggerScope.of<U>(context) ?? Trigger.of<U>();
-
-  //   if (_trigger != newTrigger) {
-  //     if (_trigger != null) {
-  //       _trigger!.stopListeningAll(this);
-  //     }
-
-  //     _trigger = newTrigger;
-
-  //     for (final key in listenTo) {
-  //       // ignore: invalid_use_of_protected_member
-  //       trigger.listenTo(key, this);
-  //     }
-  //   }
-  // }
-
-  // @override
-  // void didUpdateWidget(TriggerWidget<U> oldWidget) {
-  //   super.didUpdateWidget(oldWidget);
-  //   // ถ้า List ของการฟังเปลี่ยนไป ให้เคลียร์ของเก่าแล้วลงทะเบียนใหม่
-  //   if (oldWidget._listenTo != widget._listenTo) {
-  //     trigger.stopListeningAll(this); // เคลียร์ตัวเก่า
-  //     for (final key in widget._listenTo) {
-  //       // ignore: invalid_use_of_protected_member
-  //       trigger.listenTo(key, this); // ลงทะเบียนตัวใหม่
-  //     }
-  //   }
-  // }
 
   @override
   void didChangeDependencies() {
