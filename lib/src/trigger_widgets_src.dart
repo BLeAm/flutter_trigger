@@ -108,6 +108,7 @@ class _InheritedTriggerScope extends InheritedWidget {
 class TriggerWidget<U extends Trigger> extends StatefulWidget {
   TriggerWidget({
     super.key,
+    this.debugLabel,
     U? trigger,
     required TriggerFields<U> listenTo,
     required Widget Function(BuildContext context, U trigger) builder,
@@ -118,6 +119,7 @@ class TriggerWidget<U extends Trigger> extends StatefulWidget {
   final List<String> _listenTo;
   final Widget Function(BuildContext context, U trigger) _builder;
   final U? _trigger;
+  final String? debugLabel;
 
   @override
   State<TriggerWidget<U>> createState() => _TriggerWidgetState<U>();
@@ -162,11 +164,18 @@ class _TriggerWidgetState<U extends Trigger> extends State<TriggerWidget<U>>
   void didUpdateWidget(TriggerWidget<U> oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // 1. ถ้า listenTo เปลี่ยน ต้องล้างและจองใหม่เสมอ
-    // 2. ถ้า widget._trigger เปลี่ยน (เช่น ส่งค่าใหม่เข้ามาตรงๆ) _resolveAndSubscribe จะจัดการให้
-    if (oldWidget._listenTo != widget._listenTo ||
-        oldWidget._trigger != widget._trigger) {
+    // ใช้ listEquals เพื่อเช็คว่า "ตัวแปรที่ฟัง" เปลี่ยนไปจริงๆ หรือไม่
+    final listenToChanged = !listEquals(oldWidget._listenTo, widget._listenTo);
+    final triggerInstanceChanged = oldWidget._trigger != widget._trigger;
+
+    if (listenToChanged || triggerInstanceChanged) {
       _resolveAndSubscribe();
     }
+  }
+
+  @override
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
+    final label = widget.debugLabel != null ? '[${widget.debugLabel}]' : '';
+    return 'TriggerWidget$label';
   }
 }
