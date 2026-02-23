@@ -1,26 +1,24 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 final class SelfTriggerWidgetController<T> {
   T _data;
   T get data => _data;
-  final StreamController<T> _ctrl = StreamController<T>.broadcast();
+  late final ValueNotifier<T> _notifier = ValueNotifier<T>(_data);
+  ValueNotifier<T> get notifier => _notifier;
   bool _disposed = false;
-  Stream<T> get stream => _ctrl.stream;
 
   SelfTriggerWidgetController({required T data}) : _data = data;
 
   void update(T data) {
     if (_disposed) return;
     _data = data;
-    _ctrl.sink.add(data);
+    _notifier.value = data;
   }
 
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _ctrl.close();
+    _notifier.dispose();
   }
 }
 
@@ -87,11 +85,10 @@ class _SelfTriggerWidgetState<T> extends State<SelfTriggerWidget<T>> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<T>(
-      initialData: _stwCtrl.data,
-      stream: _stwCtrl.stream,
-      builder: (context, snapshot) {
-        return widget._builder(context, snapshot.data as T);
+    return ValueListenableBuilder<T>(
+      valueListenable: _stwCtrl.notifier,
+      builder: (context, data, child) {
+        return widget._builder(context, data);
       },
     );
   }
