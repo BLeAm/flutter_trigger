@@ -45,3 +45,4 @@ app.*.map.json
 /android/app/release
 pclist.txt
 tmp.txt
+pubspec.lock

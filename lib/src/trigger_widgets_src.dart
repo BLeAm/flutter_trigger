@@ -3,7 +3,7 @@ part of '../trigger_widgets.dart';
 mixin TriggerStateMixin<T extends StatefulWidget, U extends Trigger> on State<T>
     implements Updateable {
   U get trigger;
-  List<String> get listenTo;
+  List<int> get listenTo;
 
   @override
   void dispose() {
@@ -116,7 +116,7 @@ class TriggerWidget<U extends Trigger> extends StatefulWidget {
        _listenTo = listenTo.getList(),
        _builder = builder;
 
-  final List<String> _listenTo;
+  final List<int> _listenTo;
   final Widget Function(BuildContext context, U trigger) _builder;
   final U? _trigger;
   final String? debugLabel;
@@ -152,7 +152,7 @@ class _TriggerWidgetState<U extends Trigger> extends State<TriggerWidget<U>>
   Widget build(BuildContext context) => widget._builder(context, trigger);
 
   @override
-  List<String> get listenTo => widget._listenTo;
+  List<int> get listenTo => widget._listenTo;
 
   @override
   void didChangeDependencies() {
