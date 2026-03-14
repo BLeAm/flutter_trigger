@@ -46,3 +46,4 @@ app.*.map.json
 pclist.txt
 tmp.txt
 pubspec.lock
+trigger_widgets_src.bak

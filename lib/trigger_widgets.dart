@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:trigger/trigger.dart';
 
 export 'src/selftrigger_widget_src.dart';

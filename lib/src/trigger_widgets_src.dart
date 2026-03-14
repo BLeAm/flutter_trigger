@@ -2,18 +2,60 @@ part of '../trigger_widgets.dart';
 
 mixin TriggerStateMixin<T extends StatefulWidget, U extends Trigger> on State<T>
     implements Updateable {
-  U get trigger;
-  List<int> get listenTo;
+  U? _currentTrigger;
+
+  // ดึง Trigger จากแหล่งต่างๆ ตามลำดับความสำคัญ
+  U get trigger => TriggerScope.of<U>(context) ?? Trigger.of<U>();
+
+  // บังคับให้ผู้ใช้ระบุว่าจะฟัง field ไหน
+  TriggerFields<U> get listenTo;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _handleSubscription();
+  }
+
+  @override
+  void didUpdateWidget(T oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _handleSubscription();
+  }
+
+  void _handleSubscription() {
+    final newTrigger = trigger;
+
+    // ถ้ามีการเปลี่ยน instance ของ Trigger ให้ย้ายการฟังมาที่ตัวใหม่
+    if (_currentTrigger != newTrigger) {
+      _currentTrigger?.stopListeningAll(this);
+      _currentTrigger = newTrigger;
+
+      for (final key in listenTo.getList()) {
+        _currentTrigger!.listenTo(key, this);
+      }
+    }
+  }
 
   @override
   void dispose() {
-    trigger.stopListeningAll(this);
+    _currentTrigger?.stopListeningAll(this); // คืนทรัพยากรเสมอ
     super.dispose();
   }
 
   @override
   void update() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+
+    final scheduler = SchedulerBinding.instance;
+
+    // ถ้า Flutter กำลังอยู่ในขั้นตอนวาดหน้าจอ (Persistent/Post-Frame)
+    if (scheduler.schedulerPhase != SchedulerPhase.idle) {
+      scheduler.addPostFrameCallback((_) {
+        if (mounted) setState(() {}); // เช็ค mounted อีกครั้งเพื่อความชัวร์
+      });
+    } else {
+      setState(() {});
+    }
   }
 }
 
@@ -106,19 +148,17 @@ class _InheritedTriggerScope extends InheritedWidget {
 }
 
 class TriggerWidget<U extends Trigger> extends StatefulWidget {
-  TriggerWidget({
+  const TriggerWidget({
     super.key,
     this.debugLabel,
-    U? trigger,
-    required TriggerFields<U> listenTo,
-    required Widget Function(BuildContext context, U trigger) builder,
-  }) : _trigger = trigger,
-       _listenTo = listenTo.getList(),
-       _builder = builder;
+    this.trigger,
+    required this.listenTo,
+    required this.builder,
+  });
 
-  final List<int> _listenTo;
-  final Widget Function(BuildContext context, U trigger) _builder;
-  final U? _trigger;
+  final TriggerFields<U> listenTo;
+  final Widget Function(BuildContext context, U trigger) builder;
+  final U? trigger; // รองรับการส่ง trigger เข้ามาตรงๆ (Manual Injection)
   final String? debugLabel;
 
   @override
@@ -127,51 +167,14 @@ class TriggerWidget<U extends Trigger> extends StatefulWidget {
 
 class _TriggerWidgetState<U extends Trigger> extends State<TriggerWidget<U>>
     with TriggerStateMixin<TriggerWidget<U>, U> {
-  U? _trigger;
   @override
-  U get trigger => _trigger!;
-
-  /// ฟังก์ชันช่วยในการ resolve หา trigger และจัดการ subscription
-  void _resolveAndSubscribe() {
-    final newTrigger =
-        widget._trigger ?? TriggerScope.of<U>(context) ?? Trigger.of<U>();
-
-    // ถ้า trigger เปลี่ยน instance (ไม่ว่าจะเปลี่ยนจาก widget หรือ scope)
-    if (_trigger != newTrigger) {
-      _trigger?.stopListeningAll(this);
-      _trigger = newTrigger;
-
-      for (final key in listenTo) {
-        // ignore: invalid_use_of_protected_member
-        _trigger!.listenTo(key, this);
-      }
-    }
-  }
+  TriggerFields<U> get listenTo => widget.listenTo;
 
   @override
-  Widget build(BuildContext context) => widget._builder(context, trigger);
+  U get trigger => widget.trigger ?? super.trigger;
 
   @override
-  List<int> get listenTo => widget._listenTo;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _resolveAndSubscribe();
-  }
-
-  @override
-  void didUpdateWidget(TriggerWidget<U> oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // ใช้ listEquals เพื่อเช็คว่า "ตัวแปรที่ฟัง" เปลี่ยนไปจริงๆ หรือไม่
-    final listenToChanged = !listEquals(oldWidget._listenTo, widget._listenTo);
-    final triggerInstanceChanged = oldWidget._trigger != widget._trigger;
-
-    if (listenToChanged || triggerInstanceChanged) {
-      _resolveAndSubscribe();
-    }
-  }
+  Widget build(BuildContext context) => widget.builder(context, trigger);
 
   @override
   String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
